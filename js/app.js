@@ -113,7 +113,14 @@ async function trace() {
 
 /* ---------- 动画构建（预览与导出共用） ---------- */
 function buildAnim(svgText, o, W, H) {
-  const paths = svgText.match(/<path\b.*?\/>/gs) || [];
+  let paths = svgText.match(/<path\b.*?\/>/gs) || [];
+  // 拆多子路径：VTracer 常把同色多块并成一条 path；拆开逐块落点，前段大块也能一部分一部分出现
+  paths = paths.flatMap(p => {
+    const d = (p.match(/ d="([^"]*)"/) || ['', ''])[1];
+    const subs = d.match(/M[^Mm]*/g);
+    if (!subs || subs.length <= 1) return [p];
+    return subs.map(s => p.replace(/ d="[^"]*"/, ' d="' + s.trim() + '"'));
+  });
   const w = paths.map(p => (p.match(/d="([^"]*)"/) || ['', ''])[1].length);
   const per = w.reduce((a, b) => a + b, 0) / o.layers;
   const layers = []; let cur = [], acc = 0;
@@ -148,11 +155,11 @@ function buildAnim(svgText, o, W, H) {
       here = pool[bi].c; ordered.push(pool.splice(bi, 1)[0].i);
     }
     // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
-    const amp = Math.max(W, H) / 260;
+    const amp = Math.max(W, H) / 350;
     const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
     // 毛边直接烘焙进坐标（逐点微扰）。不用 feTurbulence 位移滤镜：
     // 滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
-    const ampW = skbWidth(W, H) * 0.3;
+    const ampW = skbWidth(W, H) * 0.15;
     const wob = (d, a) => d.replace(/([A-Za-z])([^A-Za-z]*)/g, (m, c, args) => {
       if (c === 'Z' || c === 'z') return m;
       const nums = args.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
@@ -186,32 +193,44 @@ function buildAnim(svgText, o, W, H) {
     t.T0 = .3;
   }
 
-  // 上色：逐笔落点（快速淡入 + 随机节奏微抖），节奏前慢后快（幂 0.62 缓动）；
+  // 上色：逐笔落点（淡入 + 随机节奏微抖），节奏前慢后快（幂 0.45 缓动，细节段更快）；
   // 层叠顺序严格保持 DOM 顺序（后层覆盖前层），只控制出现时刻。
-  // 同一 0.08s 槽内的落点合并进一个 <g class="ps"> 共享一次淡入：
-  // 动画对象从 P 个降到 总时长/槽宽 个，SVG 重绘压力大幅下降（修复预览卡顿）
+  // 同一 0.08s 槽内的落点合并进一个 <g class="ps"> 共享一次淡入，降低动画/重绘数量。
+  // 大块单区域用较长渐显（0.5~0.7s）代替瞬弹，配合子路径拆分实现“一部分一部分”
   const P = paths.length;
   const perPath = Math.min(.05, Math.max(.01, 20 / P)) * (o.stagger / .16); // 路径多时自动压缩，总时长 ~20s
   const totalC = (P - 1) * perPath;
   const SLOT = .08;
+  const ext = p => {
+    const n = ((p.match(/ d="([^"]*)"/) || ['', ''])[1].match(/-?\d*\.?\d+/g) || []).map(Number);
+    let x0 = 1 / 0, x1 = -1 / 0, y0 = 1 / 0, y1 = -1 / 0;
+    for (let j = 0; j + 1 < n.length; j += 2) {
+      x0 = Math.min(x0, n[j]); x1 = Math.max(x1, n[j]);
+      y0 = Math.min(y0, n[j + 1]); y1 = Math.max(y1, n[j + 1]);
+    }
+    return Math.max(x1 - x0, y1 - y0);
+  };
+  const BIG = Math.max(W, H) * .12;
   let body = ''; let gi = 0;
   layers.forEach(g => {
     body += '<g class="pg">\n';
-    let curD = null;
+    let curD = null, buf = [], bufBig = false;
+    const flush = () => {
+      if (!buf.length) return;
+      const f = (bufBig ? .5 + Math.random() * .2 : .16 + Math.random() * .1).toFixed(2);
+      body += '<g class="ps" style="--d:' + curD + 's;--f:' + f + 's">\n' + buf.join('\n') + '\n</g>\n';
+      buf = []; bufBig = false;
+    };
     g.forEach(p => {
       const u = P > 1 ? gi / (P - 1) : 0;
-      const d = t.T0 + totalC * Math.pow(u, .62) + Math.random() * perPath * .6;
+      const d = t.T0 + totalC * Math.pow(u, .45) + Math.random() * perPath * .6;
       const q = (Math.round(d / SLOT) * SLOT).toFixed(2);
-      if (q !== curD) {
-        if (curD !== null) body += '</g>\n';
-        curD = q;
-        const f = (.16 + Math.random() * .1).toFixed(2);
-        body += '<g class="ps" style="--d:' + q + 's;--f:' + f + 's">\n';
-      }
-      body += p + '\n';
+      if (q !== curD) { flush(); curD = q; }
+      buf.push(p);
+      if (ext(p) > BIG) bufBig = true;
       gi++;
     });
-    if (curD !== null) body += '</g>\n';
+    flush();
     body += '</g>\n';
   });
   t.end    = t.T0 + totalC + .45;
@@ -221,8 +240,8 @@ function buildAnim(svgText, o, W, H) {
   return { body, skInner, t, layers: layers.length, count: paths.length };
 }
 
-/* 草稿线宽随 viewBox 缩放：大 viewBox 下固定 2.6 单位会细成亚像素 */
-function skbWidth(w, h) { return +(2.6 * Math.max(1, Math.max(w, h) / 512)).toFixed(2); }
+/* 草稿线宽随 viewBox 缩放：大 viewBox 下固定单位会细成亚像素；1.8 保持细线观感 */
+function skbWidth(w, h) { return +(1.8 * Math.max(1, Math.max(w, h) / 512)).toFixed(2); }
 
 function animContent(svgText, src, o, beam) {
   const a = buildAnim(svgText, o, src.w, src.h);
@@ -570,7 +589,7 @@ function animHTML(svgText, src, o, beam) {
   const t = a.t;
   const body = a.inner;
   const layerCSS = beam ? '' : (
-    (o.sketch ? '.skb path{fill:none;stroke:#454a4d;stroke-width:' + skbWidth(src.w, src.h) + 'px;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .34s ease-out both;animation-delay:calc(.2s + var(--i) * .11s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.out.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
+    (o.sketch ? '.skb path{fill:none;stroke:#9aa1a8;stroke-width:' + skbWidth(src.w, src.h) + 'px;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .34s ease-out both;animation-delay:calc(.2s + var(--i) * .11s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.out.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
     + '/* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上'
     + '   逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */\n'
     + '/* 逐笔上色：每条路径单独落点，延迟 --d / 时长 --f 逐路径内联指定 */\n'
