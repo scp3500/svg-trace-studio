@@ -129,7 +129,7 @@ function buildAnim(svgText, o, W, H) {
     // 打稿：按墨量取最大的 32 条路径，一笔接一笔顺序勾（不再整批同时出）；
     // 顺序按空间最近邻——从一处起笔、就近连线，模拟真实勾线路径；
     // 每条线随机略偏（画不准的铅笔感）并回描一道淡复线，
-    // 整组再叠 feTurbulence 位移滤镜让线条带轻微手抖毛边；勾完即草稿完成
+    // 线条坐标逐点微扰带手抖毛边；勾完即草稿完成
     const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 32);
     const ctr = p => {
       const n = ((p.match(/d="([^"]*)"/) || ['', ''])[1].match(/-?\d*\.?\d+/g) || []).map(Number);
@@ -150,20 +150,25 @@ function buildAnim(svgText, o, W, H) {
     // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
     const amp = Math.max(W, H) / 260;
     const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
+    // 毛边直接烘焙进坐标（逐点微扰）。不用 feTurbulence 位移滤镜：
+    // 滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
+    const ampW = skbWidth(W, H) * 0.8;
+    const wob = d => d.replace(/([A-Za-z])([^A-Za-z]*)/g, (m, c, args) => {
+      if (c === 'Z' || c === 'z') return m;
+      const nums = args.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
+      if (!nums.length) return m;
+      return c + nums.map((s, i) => {
+        if ((c === 'A' || c === 'a') && i < nums.length - 2) return s; // A 的半径/旗标不动
+        return (+s + (Math.random() * 2 - 1) * ampW).toFixed(2);
+      }).join(' ');
+    });
     const sketchify = p => {
       const put = ghost => '<g transform="translate(' + jit() + ' ' + jit() + '">'
-        + p.replace('<path ', '<path pathLength="1"' + (ghost ? ' opacity=".38"' : '') + ' ', 1) + '</g>';
+        + p.replace(/ d="([^"]*)"/, (m, d) => ' d="' + wob(d) + '"')
+           .replace('<path ', '<path pathLength="1"' + (ghost ? ' opacity=".38"' : '') + ' ', 1) + '</g>';
       return put(false) + '\n' + put(true);
     };
-    // 位移滤镜参数随 viewBox 缩放，保证不同放大倍数下毛边观感一致
-    const k = Math.max(1, Math.max(W, H) / 512);
-    const bf = (0.18 / k).toFixed(4);
-    const ds = (skbWidth(W, H) * 0.85).toFixed(2);
-    skInner = '<defs><filter id="pw" x="-5%" y="-5%" width="110%" height="110%">'
-      + '<feTurbulence type="fractalNoise" baseFrequency="' + bf + '" numOctaves="2" seed="7" result="n"/>'
-      + '<feDisplacementMap in="SourceGraphic" in2="n" scale="' + ds + '" xChannelSelector="R" yChannelSelector="G"/>'
-      + '</filter></defs>\n'
-      + ordered.map((i, k2) => '<g class="skb" style="--i:' + k2 + '">\n' + sketchify(paths[i]) + '\n</g>').join('\n');
+    skInner = ordered.map((i, k2) => '<g class="skb" style="--i:' + k2 + '">\n' + sketchify(paths[i]) + '\n</g>').join('\n');
     const drawEnd = .2 + (ordered.length - 1) * .11 + .34;  // 每笔间隔 .11s、单笔 .34s
     t.T0 = drawEnd + .15;       // 草稿完成 -> 色块原地接着铺
   } else {
@@ -200,7 +205,7 @@ function animContent(svgText, src, o, beam) {
   if (beam) {
     return { inner: a.body, extra: '<div class="glow"></div>\n<div class="shine"></div>', t: a.t, layers: a.layers, count: a.count };
   }
-  const inner = (o.sketch ? '<g class="skst" filter="url(#pw)">\n' + a.skInner + '\n</g>\n' : '')
+  const inner = (o.sketch ? '<g class="skst">\n' + a.skInner + '\n</g>\n' : '')
     + '<g id="art">\n' + a.body + '\n</g>';
   return { inner, extra: '', t: a.t, layers: a.layers, count: a.count };
 }
