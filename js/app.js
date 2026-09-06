@@ -176,21 +176,24 @@ function buildAnim(svgText, o, W, H) {
   }
 
   // 上色：每条路径逐笔落点（快速淡入 + 随机节奏微抖），
+  // 节奏前慢后快（幂 0.62 缓动）：开头大色块铺得沉稳，后面细节越铺越快；
   // 层叠顺序严格保持 DOM 顺序（后层覆盖前层），只控制出现时刻
   const P = paths.length;
   const perPath = Math.min(.05, Math.max(.01, 20 / P)) * (o.stagger / .16); // 路径多时自动压缩，总时长 ~20s
+  const totalC = (P - 1) * perPath;
   let body = ''; let gi = 0;
   layers.forEach(g => {
     body += '<g class="pg">\n';
     g.forEach(p => {
-      const d = (t.T0 + gi * perPath + Math.random() * perPath * .6).toFixed(3);
+      const u = P > 1 ? gi / (P - 1) : 0;
+      const d = (t.T0 + totalC * Math.pow(u, .62) + Math.random() * perPath * .6).toFixed(3);
       const f = (.16 + Math.random() * .1).toFixed(2);
       body += p.replace('<path ', '<path class="ps" style="--d:' + d + 's;--f:' + f + 's" ', 1) + '\n';
       gi++;
     });
     body += '</g>\n';
   });
-  t.end    = t.T0 + (P - 1) * perPath + .45;
+  t.end    = t.T0 + totalC + .45;
   t.out    = t.end - .9;
   t.settle = t.end;
   t.total  = t.end + 1.3;
