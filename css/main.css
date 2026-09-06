@@ -101,19 +101,17 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes sketch-in { from { opacity: 0; } to { opacity: .38; } }
 @keyframes ink { from { opacity: .38; } to { opacity: .62; } }
 @keyframes sketch-out { to { opacity: 0; } }
-.pg { will-change: opacity, clip-path; }
+/* 图层揭示只用 transform/opacity：clip-path 在 SVG 上逐帧重栅格化，
+   大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动/位移。 */
+.pg { will-change: opacity, transform; transform-box: fill-box; transform-origin: 50% 50%; }
 .playing .pg { animation: .55s cubic-bezier(.45,.05,.25,1) both; animation-delay: var(--d); }
-.playing .wipe-r { animation-name: wipe-r; } .playing .wipe-l { animation-name: wipe-l; }
-.playing .wipe-d { animation-name: wipe-d; } .playing .dab { animation-name: dab; }
-@keyframes wipe-r { 0% { opacity: 0; clip-path: polygon(0 0,0 0,0 100%,0 100%); } 35% { opacity: 1; } 100% { opacity: 1; clip-path: polygon(-3% 0,113% 0,113% 100%,-3% 100%); } }
-@keyframes wipe-l { 0% { opacity: 0; clip-path: polygon(100% 0,100% 0,100% 100%,100% 100%); } 35% { opacity: 1; } 100% { opacity: 1; clip-path: polygon(-3% 0,103% 0,103% 100%,-3% 100%); } }
-@keyframes wipe-d { 0% { opacity: 0; clip-path: polygon(0 0,100% 0,100% 0,0 0); } 35% { opacity: 1; } 100% { opacity: 1; clip-path: polygon(0 -3%,100% -3%,100% 113%,0 113%); } }
-@keyframes dab { 0% { opacity: 0; clip-path: circle(0% at 50% 50%); } 35% { opacity: 1; } 100% { opacity: 1; clip-path: circle(120% at 50% 50%); } }
-.pg { transform-box: fill-box; transform-origin: 50% 50%; }
-@media (max-width: 860px) {
-  .playing .pg, .playing .wipe-r, .playing .wipe-l, .playing .wipe-d, .playing .dab { animation-name: pgfade-m; }
-  @keyframes pgfade-m { 0% { opacity: 0; transform: scale(.97); } 55% { opacity: 1; } 100% { opacity: 1; transform: none; } }
-}
+.playing .wipe-r { animation-name: pg-r; } .playing .wipe-l { animation-name: pg-l; }
+.playing .wipe-d { animation-name: pg-d; } .playing .dab { animation-name: pg-dab; }
+@keyframes pg-r { 0% { opacity: 0; transform: translateX(-9%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes pg-l { 0% { opacity: 0; transform: translateX(9%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes pg-d { 0% { opacity: 0; transform: translateY(7%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+@keyframes pg-dab { 0% { opacity: 0; transform: scale(1.18); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
+/* 新揭示动画全部是 transform/opacity，移动端不再需要降级到淡入 */
 .playing #art { animation: settle .9s ease-out forwards; animation-delay: var(--settle); }
 @keyframes settle { from { filter: saturate(.95) brightness(1.02); } to { filter: none; } }
 /* 光束模式 */
@@ -141,7 +139,7 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes shine2 { 0% { opacity: 0; transform: translateX(-130%); } 25% { opacity: .75; } 100% { opacity: 0; transform: translateX(130%); } }
 @keyframes sweep { 0% { transform: translateX(-160px); opacity: 0; } 6% { opacity: 1; } 92% { opacity: 1; } 100% { transform: translateX(calc(100cqw + 60px)); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .pg, .sketch { animation: none !important; opacity: 1 !important; clip-path: none !important; }
+  .pg, .sketch { animation: none !important; opacity: 1 !important; transform: none !important; }
   .sketch { opacity: 0 !important; }
   #art { animation: none !important; }
 }
