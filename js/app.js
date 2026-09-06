@@ -150,9 +150,9 @@ function buildAnim(svgText, o, W, H) {
     // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
     const amp = Math.max(W, H) / 260;
     const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
-    // 毛边直接烘焙进坐标（逐点微扰）。不用 feTurbulence 位移滤镜：
-    // 滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
-    const ampW = skbWidth(W, H) * 0.8;
+    // 毛边直接烘焙进坐标（逐点微扰，幅度仅约 0.5px 显示宽——正常铅笔的轻微手抖，不是波浪线）。
+    // 不用 feTurbulence 位移滤镜：滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
+    const ampW = skbWidth(W, H) * 0.3;
     const wob = d => d.replace(/([A-Za-z])([^A-Za-z]*)/g, (m, c, args) => {
       if (c === 'Z' || c === 'z') return m;
       const nums = args.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
@@ -175,22 +175,32 @@ function buildAnim(svgText, o, W, H) {
     t.T0 = .3;
   }
 
-  // 上色：每条路径逐笔落点（快速淡入 + 随机节奏微抖），
-  // 节奏前慢后快（幂 0.62 缓动）：开头大色块铺得沉稳，后面细节越铺越快；
-  // 层叠顺序严格保持 DOM 顺序（后层覆盖前层），只控制出现时刻
+  // 上色：逐笔落点（快速淡入 + 随机节奏微抖），节奏前慢后快（幂 0.62 缓动）；
+  // 层叠顺序严格保持 DOM 顺序（后层覆盖前层），只控制出现时刻。
+  // 同一 0.08s 槽内的落点合并进一个 <g class="ps"> 共享一次淡入：
+  // 动画对象从 P 个降到 总时长/槽宽 个，SVG 重绘压力大幅下降（修复预览卡顿）
   const P = paths.length;
   const perPath = Math.min(.05, Math.max(.01, 20 / P)) * (o.stagger / .16); // 路径多时自动压缩，总时长 ~20s
   const totalC = (P - 1) * perPath;
+  const SLOT = .08;
   let body = ''; let gi = 0;
   layers.forEach(g => {
     body += '<g class="pg">\n';
+    let curD = null;
     g.forEach(p => {
       const u = P > 1 ? gi / (P - 1) : 0;
-      const d = (t.T0 + totalC * Math.pow(u, .62) + Math.random() * perPath * .6).toFixed(3);
-      const f = (.16 + Math.random() * .1).toFixed(2);
-      body += p.replace('<path ', '<path class="ps" style="--d:' + d + 's;--f:' + f + 's" ', 1) + '\n';
+      const d = t.T0 + totalC * Math.pow(u, .62) + Math.random() * perPath * .6;
+      const q = (Math.round(d / SLOT) * SLOT).toFixed(2);
+      if (q !== curD) {
+        if (curD !== null) body += '</g>\n';
+        curD = q;
+        const f = (.16 + Math.random() * .1).toFixed(2);
+        body += '<g class="ps" style="--d:' + q + 's;--f:' + f + 's">\n';
+      }
+      body += p + '\n';
       gi++;
     });
+    if (curD !== null) body += '</g>\n';
     body += '</g>\n';
   });
   t.end    = t.T0 + totalC + .45;
