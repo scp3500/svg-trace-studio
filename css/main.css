@@ -91,16 +91,11 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes rot { to { transform: rotate(360deg); } }
 #log { color: var(--dim); font-size: 12.5px; min-height: 18px; text-align: center; }
 /* ---------- 预览动画内的元素 ---------- */
-.sketch { opacity: 0; filter: grayscale(1) brightness(.72) contrast(1.35); }
-.playing .sketch { will-change: opacity; animation: sketch-in .8s ease-out var(--tone,0s) forwards, ink .8s ease-in-out var(--ink) forwards, sketch-out 1.4s ease-in var(--out) forwards; }
-.skb path { fill: none; stroke: #454a4d; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.skb path { fill: none; stroke: #454a4d; stroke-width: var(--skb-w, 2.6); stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
 .playing .skb path { animation: draw .7s ease-out both; animation-delay: calc(.2s + var(--i) * .05s); }
-.playing .skst { animation: skst-out .8s ease both var(--tone); }
+.playing .skst { animation: skst-out .8s ease both var(--out); }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes skst-out { from { opacity: 1; } to { opacity: 0; } }
-@keyframes sketch-in { from { opacity: 0; } to { opacity: .38; } }
-@keyframes ink { from { opacity: .38; } to { opacity: .62; } }
-@keyframes sketch-out { to { opacity: 0; } }
 /* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上
    逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */
 .pg { will-change: opacity; }
@@ -133,7 +128,6 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes shine2 { 0% { opacity: 0; transform: translateX(-130%); } 25% { opacity: .75; } 100% { opacity: 0; transform: translateX(130%); } }
 @keyframes sweep { 0% { transform: translateX(-160px); opacity: 0; } 6% { opacity: 1; } 92% { opacity: 1; } 100% { transform: translateX(calc(100cqw + 60px)); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .pg, .sketch { animation: none !important; opacity: 1 !important; transform: none !important; }
-  .sketch { opacity: 0 !important; }
+  .pg { animation: none !important; opacity: 1 !important; }
   #art { animation: none !important; }
 }

@@ -126,20 +126,20 @@ function buildAnim(svgText, o) {
   const t = {};
   let skInner = '';
   if (o.sketch) {
-    // 逐笔打稿层：pathLength=1 归一化，所有线条同速勾出
-    const NB = 46;
-    const perb = w.reduce((a, b) => a + b, 0) / NB;
+    // 打稿只勾主形：按墨量取最大的 20 条路径（保持原叠放顺序），
+    // pathLength=1 归一化后分批同速勾出；勾完即草稿完成，色块原地接着铺
+    const NB = 8;
+    const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 20).sort((a, b) => a - b);
+    const perb = main.reduce((a, i) => a + w[i], 0) / NB;
     const batches = []; let bc = [], ba = 0;
-    paths.forEach((p, i) => {
-      bc.push(p.replace('<path ', '<path pathLength="1" ', 1)); ba += w[i];
+    main.forEach(i => {
+      bc.push(paths[i].replace('<path ', '<path pathLength="1" ', 1)); ba += w[i];
       if (ba >= perb && batches.length < NB - 1) { batches.push(bc); bc = []; ba = 0; }
     });
     if (bc.length) batches.push(bc);
     skInner = batches.map((b, i) => '<g class="skb" style="--i:' + i + '">\n' + b.join('\n') + '\n</g>').join('\n');
     const drawEnd = .2 + (batches.length - 1) * .05 + .7;
-    t.tone = drawEnd - .3;      // 黑白调子淡入
-    t.ink  = t.tone + .8;       // 勾线加深
-    t.T0   = t.ink + .5;        // 上色开始
+    t.T0 = drawEnd + .2;        // 草稿完成 -> 色块原地接着铺
   } else {
     t.T0 = .3;
   }
@@ -155,15 +155,15 @@ function buildAnim(svgText, o) {
   return { body, skInner, t, layers: layers.length, count: paths.length };
 }
 
+/* 草稿线宽随 viewBox 缩放：大 viewBox 下固定 2.6 单位会细成亚像素 */
+function skbWidth(w, h) { return +(2.6 * Math.max(1, Math.max(w, h) / 512)).toFixed(2); }
+
 function animContent(svgText, src, o, beam) {
   const a = buildAnim(svgText, o);
   if (beam) {
     return { inner: a.body, extra: '<div class="glow"></div>\n<div class="shine"></div>', t: a.t, layers: a.layers, count: a.count };
   }
-  const inner = (o.sketch
-      ? '<g class="skst">\n' + a.skInner + '\n</g>\n'
-      + '<use href="#art" class="sketch"/>\n'
-      : '')
+  const inner = (o.sketch ? '<g class="skst">\n' + a.skInner + '\n</g>\n' : '')
     + '<g id="art">\n' + a.body + '\n</g>';
   return { inner, extra: '', t: a.t, layers: a.layers, count: a.count };
 }
@@ -187,10 +187,9 @@ function playAnim() {
     + a.extra + svgOpen + a.inner + '</svg>';
   if (!beam) {
     const st = out.querySelector('svg');
-    st.style.setProperty('--tone', a.t.tone.toFixed(2) + 's');
-    st.style.setProperty('--ink', a.t.ink.toFixed(2) + 's');
     st.style.setProperty('--out', a.t.out.toFixed(2) + 's');
     st.style.setProperty('--settle', a.t.settle.toFixed(2) + 's');
+    st.style.setProperty('--skb-w', skbWidth(SRC.w, SRC.h) + 'px');
   }
   out.classList.remove('playing'); void out.offsetWidth; out.classList.add('playing');
   $('pvOutTag').textContent = '动画 · ' + a.layers + ' 层';
@@ -505,10 +504,7 @@ function animHTML(svgText, src, o, beam) {
   const t = a.t;
   const body = a.inner;
   const layerCSS = beam ? '' : (
-    (o.sketch ? '.skb path{fill:none;stroke:#454a4d;stroke-width:2.6;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .7s ease-out both;animation-delay:calc(.2s + var(--i) * .05s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.tone.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
-    + '.sketch{opacity:0;filter:grayscale(1) brightness(.72) contrast(1.35)}\n'
-    + '.playing .sketch{will-change:opacity;animation:sketch-in .8s ease-out ' + (t.tone || 0).toFixed(2) + 's forwards,ink .8s ease-in-out ' + (t.ink || 1.1).toFixed(2) + 's forwards,sketch-out 1.4s ease-in ' + t.out.toFixed(2) + 's forwards}\n'
-    + '@keyframes sketch-in{from{opacity:0}to{opacity:.38}}\n@keyframes ink{from{opacity:.38}to{opacity:.62}}\n@keyframes sketch-out{to{opacity:0}}\n'
+    (o.sketch ? '.skb path{fill:none;stroke:#454a4d;stroke-width:' + skbWidth(src.w, src.h) + 'px;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .7s ease-out both;animation-delay:calc(.2s + var(--i) * .05s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.out.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
     + '/* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上'
     + '   逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */\n'
     + '.pg{will-change:opacity}\n'
