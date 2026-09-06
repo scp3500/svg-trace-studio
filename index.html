@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trace Studio — 图片转 SVG / 动画 HTML</title>
+<link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+<header>
+  <h1>Trace <b>Studio</b></h1>
+  <span>图片 → SVG / HTML · 手绘动画导出 · VTracer WASM 纯浏览器本地运行 · 文件不出本机</span>
+</header>
+<div class="layout">
+  <aside>
+    <div class="sec">
+      <h2>描摹参数</h2>
+      <div class="row"><label>分层结构</label>
+        <select id="hier"><option value="stacked">stacked 叠层</option><option value="cutout">cutout 挖剪</option></select></div>
+      <div class="row"><label>曲线模式</label>
+        <select id="mode"><option value="spline">spline 样条</option><option value="polygon">polygon 折线</option><option value="none">none 像素</option></select></div>
+      <div class="row"><label>颜色精度</label><input type="range" id="cp" min="1" max="10" value="7"><span class="val" id="cpv">7</span></div>
+      <div class="row"><label>斑点过滤</label><input type="range" id="fs" min="0" max="20" value="4"><span class="val" id="fsv">4</span></div>
+      <div class="row"><label>层差</label><input type="range" id="ld" min="2" value="16"><span class="val" id="ldv">16</span></div>
+      <div class="row"><label>预放大</label>
+        <select id="upscale"><option value="1">不放大</option><option value="2">2 倍</option><option value="4" selected>4 倍</option></select></div>
+      <div class="hint">小图（&lt;600px）建议 4 倍；照片类素材建议降颜色精度、升斑点过滤。</div>
+    </div>
+    <div class="sec">
+      <h2>动画配置</h2>
+      <div class="row"><label>动画风格</label>
+        <select id="anim">
+          <option value="paint">手绘上色</option>
+          <option value="beam">光束扫描</option>
+        </select></div>
+      <div class="row"><label>层数</label><input type="range" id="layers" min="8" max="80" value="42"><span class="val" id="layersv">42</span></div>
+      <div class="row"><label>层间隔 (s)</label><input type="range" id="stagger" min="4" max="30" value="16"><span class="val" id="staggerv">.16</span></div>
+      <div class="check"><input type="checkbox" id="sketch" checked><label for="sketch">包含铅笔草稿阶段</label></div>
+      <div class="hint">手绘模式：草稿→勾线→逐层铺色→定稿。光束模式：辉光扫描揭画+高光扫尾。</div>
+    </div>
+    <div class="sec">
+      <h2>导出</h2>
+      <div class="row"><label>PNG 倍率</label>
+        <select id="pngscale"><option value="1">1× 工作尺寸</option><option value="2" selected>2×</option><option value="4">4×</option></select></div>
+      <div class="row"><label>CSS 图层数</label><input type="range" id="csslayers" min="10" max="200" value="80"><span class="val" id="csslayersv">80</span></div>
+      <div class="btns" style="flex-direction:column; align-items:stretch">
+        <button class="bt" id="dlsvg" disabled>⬇ 下载 SVG</button>
+        <button class="bt" id="dlpng" disabled>⬇ 下载 PNG</button>
+        <button class="bt" id="dlstatic" disabled>⬇ 下载静态 HTML</button>
+        <button class="bt primary" id="dlanim" disabled>⬇ 下载动画 HTML</button>
+        <button class="bt" id="dlcsszip" disabled>⬇ 下载纯 CSS 绘图包 (zip)</button>
+      </div>
+      <div class="hint">纯 CSS 包：hitagi-css 风格的 index.html + style.css 分层结构（--fill / clip-path: path()），解压即用。</div>
+    </div>
+  </aside>
+  <main>
+    <div class="drop" id="drop">
+      拖一张图片到这里，或 <b>点击选择</b>（PNG / JPG / GIF / BMP，全部本地处理）<br>
+      <span style="font-size:12px">首次转换需初始化 WASM（约 0.7 MB，已内联，无网络请求）</span>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+    <div class="stats" id="stats" hidden></div>
+    <div class="pv-wrap" id="pvwrap" hidden>
+      <div>
+        <div class="pv" id="pvSrc"><canvas id="cvSrc"></canvas><span class="tag">原图</span></div>
+        <div class="pv-title">原图</div>
+      </div>
+      <div>
+        <div class="pv" id="pvOut"><span class="tag" id="pvOutTag">SVG</span></div>
+        <div class="pv-title" id="pvOutTitle">描摹结果</div>
+      </div>
+    </div>
+    <div class="btns">
+      <button class="bt primary" id="retrace" disabled>↻ 重新描摹</button>
+      <button class="bt" id="replay" disabled>▶ 播放动画</button>
+    </div>
+    <div id="log"></div>
+  </main>
+</div>
+
+<script src="js/vtracer-wasm.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -4,7 +4,13 @@
 
 ## 文件
 
-- `svg-trace-studio.html` — 完整工具（约 950KB，VTracer WASM 已内嵌，无外部依赖）
+- `svg-trace-studio.html` — 原始单文件版（约 950KB，VTracer WASM 已内嵌，无外部依赖）
+- `index.html` — 拆分版入口
+- `css/main.css` — 主样式
+- `js/vtracer-wasm.js` — VTracer WASM 胶水 + 内嵌 wasm 二进制（约 900KB）
+- `js/app.js` — 工具逻辑：参数绑定、描摹、动画编排、导出器
+
+两个入口功能一致；后续开发基于拆分版。
 
 ## 功能
 
