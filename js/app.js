@@ -128,8 +128,8 @@ function buildAnim(svgText, o, W, H) {
   if (o.sketch) {
     // 打稿：按墨量取最大的 32 条路径，一笔接一笔顺序勾（不再整批同时出）；
     // 顺序按空间最近邻——从一处起笔、就近连线，模拟真实勾线路径；
-    // 每条线随机略偏（画不准的铅笔感）并回描一道淡复线，
-    // 线条坐标逐点微扰带手抖毛边；勾完即草稿完成
+    // 每条线单线勾出、随机略偏（画不准的铅笔感），
+    // 线条坐标逐点微扰带轻微手抖；勾完即草稿完成
     const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 32);
     const ctr = p => {
       const n = ((p.match(/d="([^"]*)"/) || ['', ''])[1].match(/-?\d*\.?\d+/g) || []).map(Number);
@@ -150,23 +150,34 @@ function buildAnim(svgText, o, W, H) {
     // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
     const amp = Math.max(W, H) / 260;
     const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
-    // 毛边直接烘焙进坐标（逐点微扰，幅度仅约 0.5px 显示宽——正常铅笔的轻微手抖，不是波浪线）。
-    // 不用 feTurbulence 位移滤镜：滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
+    // 毛边直接烘焙进坐标（逐点微扰）。不用 feTurbulence 位移滤镜：
+    // 滤镜叠在 dashoffset 动画组上会每帧重算整幅噪声，大 viewBox 下直接卡死
     const ampW = skbWidth(W, H) * 0.3;
-    const wob = d => d.replace(/([A-Za-z])([^A-Za-z]*)/g, (m, c, args) => {
+    const wob = (d, a) => d.replace(/([A-Za-z])([^A-Za-z]*)/g, (m, c, args) => {
       if (c === 'Z' || c === 'z') return m;
       const nums = args.match(/-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
       if (!nums.length) return m;
       return c + nums.map((s, i) => {
         if ((c === 'A' || c === 'a') && i < nums.length - 2) return s; // A 的半径/旗标不动
-        return (+s + (Math.random() * 2 - 1) * ampW).toFixed(2);
+        return (+s + (Math.random() * 2 - 1) * a).toFixed(2);
       }).join(' ');
     });
+    // 干净的单线草稿：只描外轮廓第一条子路径（洞线会让草稿变碎），
+    // 毛边幅度按路径自身尺寸锥制——小细节几乎不抖，大轮廓轻抖；单线不回描
     const sketchify = p => {
-      const put = ghost => '<g transform="translate(' + jit() + ' ' + jit() + '">'
-        + p.replace(/ d="([^"]*)"/, (m, d) => ' d="' + wob(d) + '"')
-           .replace('<path ', '<path pathLength="1"' + (ghost ? ' opacity=".38"' : '') + ' ', 1) + '</g>';
-      return put(false) + '\n' + put(true);
+      const dAll = (p.match(/ d="([^"]*)"/) || ['', ''])[1];
+      const nm = dAll.slice(1).search(/M/);
+      const d0 = nm === -1 ? dAll : dAll.slice(0, nm + 1);
+      const nums = (d0.match(/-?\d*\.?\d+/g) || []).map(Number);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (let j = 0; j + 1 < nums.length; j += 2) {
+        x0 = Math.min(x0, nums[j]); x1 = Math.max(x1, nums[j]);
+        y0 = Math.min(y0, nums[j + 1]); y1 = Math.max(y1, nums[j + 1]);
+      }
+      const a = Math.min(ampW, Math.max(x1 - x0, y1 - y0) * .06);
+      return '<g transform="translate(' + jit() + ' ' + jit() + '">'
+        + p.replace(/ d="[^"]*"/, ' d="' + wob(d0, a) + '"')
+           .replace('<path ', '<path pathLength="1" ', 1) + '</g>';
     };
     skInner = ordered.map((i, k2) => '<g class="skb" style="--i:' + k2 + '">\n' + sketchify(paths[i]) + '\n</g>').join('\n');
     const drawEnd = .2 + (ordered.length - 1) * .11 + .34;  // 每笔间隔 .11s、单笔 .34s
