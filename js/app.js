@@ -112,7 +112,7 @@ async function trace() {
 }
 
 /* ---------- 动画构建（预览与导出共用） ---------- */
-function buildAnim(svgText, o) {
+function buildAnim(svgText, o, W, H) {
   const paths = svgText.match(/<path\b.*?\/>/gs) || [];
   const w = paths.map(p => (p.match(/d="([^"]*)"/) || ['', ''])[1].length);
   const per = w.reduce((a, b) => a + b, 0) / o.layers;
@@ -126,18 +126,35 @@ function buildAnim(svgText, o) {
   const t = {};
   let skInner = '';
   if (o.sketch) {
-    // 打稿只勾主形：按墨量取最大的 20 条路径（保持原叠放顺序），
-    // pathLength=1 归一化后分批同速勾出；勾完即草稿完成，色块原地接着铺
-    const NB = 8;
-    const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 20).sort((a, b) => a - b);
+    // 打稿：按墨量取最大的 32 条路径（保持原叠放顺序），分 10 批勾出；
+    // 每条线随机略偏（画不准的铅笔感）并回描一道淡复线，
+    // 整组再叠 feTurbulence 位移滤镜让线条带轻微手抖毛边；勾完即草稿完成
+    const NB = 10;
+    const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 32).sort((a, b) => a - b);
     const perb = main.reduce((a, i) => a + w[i], 0) / NB;
+    // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
+    const amp = Math.max(W, H) / 260;
+    const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
+    const sketchify = p => {
+      const put = ghost => '<g transform="translate(' + jit() + ' ' + jit() + '">'
+        + p.replace('<path ', '<path pathLength="1"' + (ghost ? ' opacity=".38"' : '') + ' ', 1) + '</g>';
+      return put(false) + '\n' + put(true);
+    };
     const batches = []; let bc = [], ba = 0;
     main.forEach(i => {
-      bc.push(paths[i].replace('<path ', '<path pathLength="1" ', 1)); ba += w[i];
+      bc.push(sketchify(paths[i])); ba += w[i];
       if (ba >= perb && batches.length < NB - 1) { batches.push(bc); bc = []; ba = 0; }
     });
     if (bc.length) batches.push(bc);
-    skInner = batches.map((b, i) => '<g class="skb" style="--i:' + i + '">\n' + b.join('\n') + '\n</g>').join('\n');
+    // 位移滤镜参数随 viewBox 缩放，保证不同放大倍数下毛边观感一致
+    const k = Math.max(1, Math.max(W, H) / 512);
+    const bf = (0.18 / k).toFixed(4);
+    const ds = (skbWidth(W, H) * 0.85).toFixed(2);
+    skInner = '<defs><filter id="pw" x="-5%" y="-5%" width="110%" height="110%">'
+      + '<feTurbulence type="fractalNoise" baseFrequency="' + bf + '" numOctaves="2" seed="7" result="n"/>'
+      + '<feDisplacementMap in="SourceGraphic" in2="n" scale="' + ds + '" xChannelSelector="R" yChannelSelector="G"/>'
+      + '</filter></defs>\n'
+      + batches.map((b, i) => '<g class="skb" style="--i:' + i + '">\n' + b.join('\n') + '\n</g>').join('\n');
     const drawEnd = .2 + (batches.length - 1) * .05 + .7;
     t.T0 = drawEnd + .2;        // 草稿完成 -> 色块原地接着铺
   } else {
@@ -159,11 +176,11 @@ function buildAnim(svgText, o) {
 function skbWidth(w, h) { return +(2.6 * Math.max(1, Math.max(w, h) / 512)).toFixed(2); }
 
 function animContent(svgText, src, o, beam) {
-  const a = buildAnim(svgText, o);
+  const a = buildAnim(svgText, o, src.w, src.h);
   if (beam) {
     return { inner: a.body, extra: '<div class="glow"></div>\n<div class="shine"></div>', t: a.t, layers: a.layers, count: a.count };
   }
-  const inner = (o.sketch ? '<g class="skst">\n' + a.skInner + '\n</g>\n' : '')
+  const inner = (o.sketch ? '<g class="skst" filter="url(#pw)">\n' + a.skInner + '\n</g>\n' : '')
     + '<g id="art">\n' + a.body + '\n</g>';
   return { inner, extra: '', t: a.t, layers: a.layers, count: a.count };
 }
