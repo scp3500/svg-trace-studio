@@ -92,14 +92,15 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 #log { color: var(--dim); font-size: 12.5px; min-height: 18px; text-align: center; }
 /* ---------- 预览动画内的元素 ---------- */
 .skb path { fill: none; stroke: #454a4d; stroke-width: var(--skb-w, 2.6); stroke-linejoin: round; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; }
-.playing .skb path { animation: draw .7s ease-out both; animation-delay: calc(.2s + var(--i) * .05s); }
+.playing .skb path { animation: draw .34s ease-out both; animation-delay: calc(.2s + var(--i) * .11s); }
 .playing .skst { animation: skst-out .8s ease both var(--out); }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes skst-out { from { opacity: 1; } to { opacity: 0; } }
 /* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上
    逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */
-.pg { will-change: opacity; }
-.playing .pg { animation: pg-in .25s ease-out both; animation-delay: var(--d); }
+/* 逐笔上色：每条路径单独落点，延迟 --d / 时长 --f 逐路径内联指定 */
+.ps { }
+.playing .ps { animation: pg-in var(--f, .22s) ease-out both; animation-delay: var(--d); }
 @keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
 .playing #art { animation: settle .9s ease-out forwards; animation-delay: var(--settle); }
 @keyframes settle { from { filter: saturate(.95) brightness(1.02); } to { filter: none; } }
@@ -128,6 +129,6 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes shine2 { 0% { opacity: 0; transform: translateX(-130%); } 25% { opacity: .75; } 100% { opacity: 0; transform: translateX(130%); } }
 @keyframes sweep { 0% { transform: translateX(-160px); opacity: 0; } 6% { opacity: 1; } 92% { opacity: 1; } 100% { transform: translateX(calc(100cqw + 60px)); opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .pg { animation: none !important; opacity: 1 !important; }
+  .pg, .ps { animation: none !important; opacity: 1 !important; }
   #art { animation: none !important; }
 }

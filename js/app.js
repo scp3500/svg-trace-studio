@@ -126,12 +126,27 @@ function buildAnim(svgText, o, W, H) {
   const t = {};
   let skInner = '';
   if (o.sketch) {
-    // 打稿：按墨量取最大的 32 条路径（保持原叠放顺序），分 10 批勾出；
+    // 打稿：按墨量取最大的 32 条路径，一笔接一笔顺序勾（不再整批同时出）；
+    // 顺序按空间最近邻——从一处起笔、就近连线，模拟真实勾线路径；
     // 每条线随机略偏（画不准的铅笔感）并回描一道淡复线，
     // 整组再叠 feTurbulence 位移滤镜让线条带轻微手抖毛边；勾完即草稿完成
-    const NB = 10;
-    const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 32).sort((a, b) => a - b);
-    const perb = main.reduce((a, i) => a + w[i], 0) / NB;
+    const main = paths.map((p, i) => i).sort((a, b) => w[b] - w[a]).slice(0, 32);
+    const ctr = p => {
+      const n = ((p.match(/d="([^"]*)"/) || ['', ''])[1].match(/-?\d*\.?\d+/g) || []).map(Number);
+      let x = 0, y = 0, c = 0;
+      for (let j = 0; j + 1 < n.length && c < 8; j += 2) { x += n[j]; y += n[j + 1]; c++; }
+      return c ? [x / c, y / c] : [0, 0];
+    };
+    const pool = main.map(i => ({ i, c: ctr(paths[i]) }));
+    const ordered = []; let here = [0, 0];
+    while (pool.length) {
+      let bi = 0, bd = Infinity;
+      for (let j = 0; j < pool.length; j++) {
+        const d = (pool[j].c[0] - here[0]) ** 2 + (pool[j].c[1] - here[1]) ** 2;
+        if (d < bd) { bd = d; bi = j; }
+      }
+      here = pool[bi].c; ordered.push(pool.splice(bi, 1)[0].i);
+    }
     // 偏移幅度按 viewBox 定：约等于显示宽 354px 时的 1.3px
     const amp = Math.max(W, H) / 260;
     const jit = () => ((Math.random() * 2 - 1) * amp).toFixed(2);
@@ -140,12 +155,6 @@ function buildAnim(svgText, o, W, H) {
         + p.replace('<path ', '<path pathLength="1"' + (ghost ? ' opacity=".38"' : '') + ' ', 1) + '</g>';
       return put(false) + '\n' + put(true);
     };
-    const batches = []; let bc = [], ba = 0;
-    main.forEach(i => {
-      bc.push(sketchify(paths[i])); ba += w[i];
-      if (ba >= perb && batches.length < NB - 1) { batches.push(bc); bc = []; ba = 0; }
-    });
-    if (bc.length) batches.push(bc);
     // 位移滤镜参数随 viewBox 缩放，保证不同放大倍数下毛边观感一致
     const k = Math.max(1, Math.max(W, H) / 512);
     const bf = (0.18 / k).toFixed(4);
@@ -154,18 +163,29 @@ function buildAnim(svgText, o, W, H) {
       + '<feTurbulence type="fractalNoise" baseFrequency="' + bf + '" numOctaves="2" seed="7" result="n"/>'
       + '<feDisplacementMap in="SourceGraphic" in2="n" scale="' + ds + '" xChannelSelector="R" yChannelSelector="G"/>'
       + '</filter></defs>\n'
-      + batches.map((b, i) => '<g class="skb" style="--i:' + i + '">\n' + b.join('\n') + '\n</g>').join('\n');
-    const drawEnd = .2 + (batches.length - 1) * .05 + .7;
-    t.T0 = drawEnd + .2;        // 草稿完成 -> 色块原地接着铺
+      + ordered.map((i, k2) => '<g class="skb" style="--i:' + k2 + '">\n' + sketchify(paths[i]) + '\n</g>').join('\n');
+    const drawEnd = .2 + (ordered.length - 1) * .11 + .34;  // 每笔间隔 .11s、单笔 .34s
+    t.T0 = drawEnd + .15;       // 草稿完成 -> 色块原地接着铺
   } else {
     t.T0 = .3;
   }
 
-  let body = '';
-  layers.forEach((g, i) => {
-    body += '<g class="pg" style="--i:' + i + ';--d:calc(' + t.T0 + 's + var(--i) * ' + o.stagger + 's)">\n' + g.join('\n') + '\n</g>\n';
+  // 上色：每条路径逐笔落点（快速淡入 + 随机节奏微抖），
+  // 层叠顺序严格保持 DOM 顺序（后层覆盖前层），只控制出现时刻
+  const P = paths.length;
+  const perPath = Math.min(.05, Math.max(.01, 20 / P)) * (o.stagger / .16); // 路径多时自动压缩，总时长 ~20s
+  let body = ''; let gi = 0;
+  layers.forEach(g => {
+    body += '<g class="pg">\n';
+    g.forEach(p => {
+      const d = (t.T0 + gi * perPath + Math.random() * perPath * .6).toFixed(3);
+      const f = (.16 + Math.random() * .1).toFixed(2);
+      body += p.replace('<path ', '<path class="ps" style="--d:' + d + 's;--f:' + f + 's" ', 1) + '\n';
+      gi++;
+    });
+    body += '</g>\n';
   });
-  t.end    = t.T0 + (layers.length - 1) * o.stagger + .55;
+  t.end    = t.T0 + (P - 1) * perPath + .45;
   t.out    = t.end - .9;
   t.settle = t.end;
   t.total  = t.end + 1.3;
@@ -521,11 +541,11 @@ function animHTML(svgText, src, o, beam) {
   const t = a.t;
   const body = a.inner;
   const layerCSS = beam ? '' : (
-    (o.sketch ? '.skb path{fill:none;stroke:#454a4d;stroke-width:' + skbWidth(src.w, src.h) + 'px;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .7s ease-out both;animation-delay:calc(.2s + var(--i) * .05s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.out.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
+    (o.sketch ? '.skb path{fill:none;stroke:#454a4d;stroke-width:' + skbWidth(src.w, src.h) + 'px;stroke-linejoin:round;stroke-linecap:round;stroke-dasharray:1;stroke-dashoffset:1}\n.playing .skb path{animation:draw .34s ease-out both;animation-delay:calc(.2s + var(--i) * .11s)}\n.playing .skst{animation:skst-out .8s ease both ' + t.out.toFixed(2) + 's}\n@keyframes draw{to{stroke-dashoffset:0}}\n@keyframes skst-out{from{opacity:1}to{opacity:0}}\n' : '')
     + '/* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上'
     + '   逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */\n'
-    + '.pg{will-change:opacity}\n'
-    + '.playing .pg{animation:pg-in .25s ease-out both;animation-delay:var(--d)}\n'
+    + '/* 逐笔上色：每条路径单独落点，延迟 --d / 时长 --f 逐路径内联指定 */\n'
+    + '.playing .ps{animation:pg-in var(--f,.22s) ease-out both;animation-delay:var(--d)}\n'
     + '@keyframes pg-in{from{opacity:0}to{opacity:1}}\n'
     + '.playing #art{animation:settle .9s ease-out forwards;animation-delay:' + t.settle.toFixed(2) + 's}\n'
     + '@keyframes settle{from{filter:saturate(.95) brightness(1.02)}to{filter:none}}\n'
