@@ -144,11 +144,9 @@ function buildAnim(svgText, o) {
     t.T0 = .3;
   }
 
-  const V = ['wipe-r', 'wipe-l', 'wipe-d', 'dab'];
   let body = '';
   layers.forEach((g, i) => {
-    const v = i < 6 ? V[(i * 3 + 1) % 4] : V[Math.floor(Math.random() * 4)];
-    body += '<g class="pg ' + v + '" style="--i:' + i + ';--d:calc(' + t.T0 + 's + var(--i) * ' + o.stagger + 's)">\n' + g.join('\n') + '\n</g>\n';
+    body += '<g class="pg" style="--i:' + i + ';--d:calc(' + t.T0 + 's + var(--i) * ' + o.stagger + 's)">\n' + g.join('\n') + '\n</g>\n';
   });
   t.end    = t.T0 + (layers.length - 1) * o.stagger + .55;
   t.out    = t.end - .9;
@@ -511,17 +509,11 @@ function animHTML(svgText, src, o, beam) {
     + '.sketch{opacity:0;filter:grayscale(1) brightness(.72) contrast(1.35)}\n'
     + '.playing .sketch{will-change:opacity;animation:sketch-in .8s ease-out ' + (t.tone || 0).toFixed(2) + 's forwards,ink .8s ease-in-out ' + (t.ink || 1.1).toFixed(2) + 's forwards,sketch-out 1.4s ease-in ' + t.out.toFixed(2) + 's forwards}\n'
     + '@keyframes sketch-in{from{opacity:0}to{opacity:.38}}\n@keyframes ink{from{opacity:.38}to{opacity:.62}}\n@keyframes sketch-out{to{opacity:0}}\n'
-    + '/* 图层揭示只用 transform/opacity：clip-path 在 SVG 上逐帧重栅格化，'
-    + '   大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动/位移。 */\n'
-    + '.pg{will-change:opacity,transform}\n'
-    + '.pg{transform-box:fill-box;transform-origin:50% 50%}\n'
-    + '.playing .pg{animation:.55s cubic-bezier(.45,.05,.25,1) both;animation-delay:var(--d)}\n'
-    + '.playing .wipe-r{animation-name:pg-r}.playing .wipe-l{animation-name:pg-l}\n'
-    + '.playing .wipe-d{animation-name:pg-d}.playing .dab{animation-name:pg-dab}\n'
-    + '@keyframes pg-r{0%{opacity:0;transform:translateX(-9%)}35%{opacity:1}100%{opacity:1;transform:none}}\n'
-    + '@keyframes pg-l{0%{opacity:0;transform:translateX(9%)}35%{opacity:1}100%{opacity:1;transform:none}}\n'
-    + '@keyframes pg-d{0%{opacity:0;transform:translateY(7%)}35%{opacity:1}100%{opacity:1;transform:none}}\n'
-    + '@keyframes pg-dab{0%{opacity:0;transform:scale(1.18)}35%{opacity:1}100%{opacity:1;transform:none}}\n'
+    + '/* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上'
+    + '   逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */\n'
+    + '.pg{will-change:opacity}\n'
+    + '.playing .pg{animation:pg-in .25s ease-out both;animation-delay:var(--d)}\n'
+    + '@keyframes pg-in{from{opacity:0}to{opacity:1}}\n'
     + '.playing #art{animation:settle .9s ease-out forwards;animation-delay:' + t.settle.toFixed(2) + 's}\n'
     + '@keyframes settle{from{filter:saturate(.95) brightness(1.02)}to{filter:none}}\n'
   );

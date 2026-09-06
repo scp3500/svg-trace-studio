@@ -101,17 +101,11 @@ button.bt.primary:hover:not(:disabled) { background: #35d1a9; }
 @keyframes sketch-in { from { opacity: 0; } to { opacity: .38; } }
 @keyframes ink { from { opacity: .38; } to { opacity: .62; } }
 @keyframes sketch-out { to { opacity: 0; } }
-/* 图层揭示只用 transform/opacity：clip-path 在 SVG 上逐帧重栅格化，
-   大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动/位移。 */
-.pg { will-change: opacity, transform; transform-box: fill-box; transform-origin: 50% 50%; }
-.playing .pg { animation: .55s cubic-bezier(.45,.05,.25,1) both; animation-delay: var(--d); }
-.playing .wipe-r { animation-name: pg-r; } .playing .wipe-l { animation-name: pg-l; }
-.playing .wipe-d { animation-name: pg-d; } .playing .dab { animation-name: pg-dab; }
-@keyframes pg-r { 0% { opacity: 0; transform: translateX(-9%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
-@keyframes pg-l { 0% { opacity: 0; transform: translateX(9%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
-@keyframes pg-d { 0% { opacity: 0; transform: translateY(7%); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
-@keyframes pg-dab { 0% { opacity: 0; transform: scale(1.18); } 35% { opacity: 1; } 100% { opacity: 1; transform: none; } }
-/* 新揭示动画全部是 transform/opacity，移动端不再需要降级到淡入 */
+/* 图层原地落笔：短淡入，无位移无缩放。不用 clip-path——它在 SVG 上
+   逐帧重栅格化，大 viewBox 非整数缩放时每帧像素吸附漂移 -> 抖动。 */
+.pg { will-change: opacity; }
+.playing .pg { animation: pg-in .25s ease-out both; animation-delay: var(--d); }
+@keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
 .playing #art { animation: settle .9s ease-out forwards; animation-delay: var(--settle); }
 @keyframes settle { from { filter: saturate(.95) brightness(1.02); } to { filter: none; } }
 /* 光束模式 */
